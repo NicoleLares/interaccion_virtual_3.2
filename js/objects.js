@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { CATEGORIES, TABLES, TABLE_TOP } from './config.js';
@@ -49,9 +50,11 @@ function shuffle(array) {
   return array;
 }
 
+// Separación adaptada a las cubiertas laterales de 1.10 × 0.65 m.
+// Cada centro deja margen para el radio de la pieza, incluso con ruido aleatorio.
 const SLOTS = [
-  { x: -0.37, z: -0.15 }, { x: 0, z: -0.15 }, { x: 0.37, z: -0.15 },
-  { x: -0.19, z: 0.16 }, { x: 0.19, z: 0.16 }
+  { x: -0.36, z: -0.14 }, { x: 0, z: -0.14 }, { x: 0.36, z: -0.14 },
+  { x: -0.18, z: 0.15 }, { x: 0.18, z: 0.15 }
 ];
 
 export function createPieces(scene, physics) {

@@ -1,5 +1,7 @@
+
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { WORKSPACE } from './config.js';
 
 // Conserva raycasting y gesto de pinza de la práctica 3.1.
 // El movimiento ahora controla el CUERPO RÍGIDO, nunca solo la malla.
@@ -54,9 +56,9 @@ export function createInteraction(lab, hands, game, options = {}) {
     const p = held.piece;
     const body = p.body;
     target.copy(rayOrigin).addScaledVector(rayDirection, held.distance).add(held.offset);
-    target.x = THREE.MathUtils.clamp(target.x, -1.85, 1.85);
-    target.y = THREE.MathUtils.clamp(target.y, .16, 2.4);
-    target.z = THREE.MathUtils.clamp(target.z, -2.80, .30);
+    target.x = THREE.MathUtils.clamp(target.x, WORKSPACE.minX, WORKSPACE.maxX);
+    target.y = THREE.MathUtils.clamp(target.y, WORKSPACE.minY, WORKSPACE.maxY);
+    target.z = THREE.MathUtils.clamp(target.z, WORKSPACE.minZ, WORKSPACE.maxZ);
     current.copy(body.position);
     stepVec.copy(target).sub(current);
     const distance = stepVec.length();

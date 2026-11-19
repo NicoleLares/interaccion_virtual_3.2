@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { createPhysics } from './physics.js';
 import { createPieces } from './objects.js';
@@ -22,8 +23,10 @@ export function createLaboratoryScene() {
   scene.background = new THREE.Color(0x08101e);
   scene.fog = new THREE.Fog(0x08101e, 6.5, 15);
   const camera = new THREE.PerspectiveCamera(67, 1, 0.05, 55);
-  camera.position.set(0, 1.62, 0.60); // escritorio; local-floor controla la pose en VR
-  camera.lookAt(0, 1.02, -1.65);
+  // Cámara oblicua SOLO para la vista previa de escritorio.
+  // En Meta Quest, WebXR usa la pose real (local-floor) del visor.
+  camera.position.set(2.20, 2.15, 2.65);
+  camera.lookAt(0, 0.99, -0.43);
   const physics = createPhysics();
   scene.add(new THREE.HemisphereLight(0xcce6ff, 0x253247, 2.3));
   const sun = new THREE.DirectionalLight(0xffffff, 2.4);
@@ -38,6 +41,12 @@ export function createLaboratoryScene() {
   scene.add(floorMesh);
   const grid = new THREE.GridHelper(12, 40, 0x345675, 0x1b3047);
   grid.position.y = .005; scene.add(grid);
+  // Marca de suelo no colisionable para orientar al usuario VR (en el centro).
+  const positionRing = new THREE.Mesh(new THREE.RingGeometry(.22, .25, 48),
+    new THREE.MeshBasicMaterial({ color: 0x4cd9f4, transparent: true, opacity: .54, side: THREE.DoubleSide }));
+  positionRing.rotation.x = -Math.PI / 2;
+  positionRing.position.set(0, .012, 0);
+  scene.add(positionRing);
 
   const boardMaterial = new THREE.MeshStandardMaterial({ color: 0x233951, roughness: .48, metalness: .22 });
   const legMaterial = new THREE.MeshStandardMaterial({ color: 0x18263a, roughness: .6, metalness: .16 });
@@ -51,18 +60,27 @@ export function createLaboratoryScene() {
   for (const [i, t] of TABLES.entries()) {
     const top = solidBox(t.x, TABLE.centerY, t.z, TABLE.width, TABLE.thick, TABLE.depth, boardMaterial);
     top.add(new THREE.LineSegments(new THREE.EdgesGeometry(top.geometry), edgeMaterial));
-    for (const dx of [-.54, .54]) for (const dz of [-.26, .26]) {
-      solidBox(t.x + dx, .385, t.z + dz, .065, .77, .065, legMaterial);
+    // Patas calculadas desde la altura/dimensiones de la cubierta:
+    // tanto la malla como el colisionador comparten exactamente la posición.
+    const legHeight = TABLE.centerY - TABLE.thick / 2;
+    const legX = TABLE.width / 2 - .105;
+    const legZ = TABLE.depth / 2 - .085;
+    for (const dx of [-legX, legX]) for (const dz of [-legZ, legZ]) {
+      solidBox(t.x + dx, legHeight / 2, t.z + dz, .060, legHeight, .060, legMaterial);
     }
     const nameTex = labelTexture(`MESA ${i + 1}`, '#b8efff');
     const namePlate = new THREE.Mesh(new THREE.PlaneGeometry(.45, .14), new THREE.MeshBasicMaterial({ map: nameTex, transparent: true, side: THREE.DoubleSide }));
-    namePlate.position.set(t.x, TABLE_TOP + .045, t.z - TABLE.depth / 2 + .002);
-    namePlate.rotation.x = -Math.PI / 3; scene.add(namePlate);
+    // Rótulos en el borde dirigido hacia el usuario, sin cuerpos de colisión.
+    const frontEdge = t.z > 0 ? -1 : 1;
+    namePlate.position.set(t.x, TABLE_TOP + .062, t.z + frontEdge * (TABLE.depth / 2 + .012));
+    namePlate.rotation.x = frontEdge * Math.PI / 3;
+    scene.add(namePlate);
   }
 
-  // Plataforma física que sostiene los cuatro botes.
-  solidBox(0, .71, BIN_Z, 3.17, .18, .77, boardMaterial);
-  for (const x of [-1.42, 1.42]) solidBox(x, .32, BIN_Z, .075, .64, .08, legMaterial);
+  // Estación de clasificación más baja, delante de la zona de agarre.
+  // El plano superior coincide con el fondo de los recipientes.
+  solidBox(0, .55, BIN_Z, 3.08, .14, .67, boardMaterial);
+  for (const x of [-1.39, 1.39]) solidBox(x, .24, BIN_Z, .075, .48, .08, legMaterial);
 
   const bins = CATEGORIES.map((category, index) => {
     const x = BIN_X[index];

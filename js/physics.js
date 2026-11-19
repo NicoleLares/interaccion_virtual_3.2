@@ -1,5 +1,6 @@
+
 import * as CANNON from 'cannon-es';
-import { FIXED_STEP } from './config.js';
+import { FIXED_STEP, WORKSPACE } from './config.js';
 
 // El motor físico es la fuente de verdad de posición/rotación.
 export function createPhysics() {
@@ -47,7 +48,8 @@ export function createPhysics() {
   // a través del suelo, mesas o paredes de recipientes con movimientos rápidos.
   function safeForHeld(x, y, z, radius = 0.105) {
     if (y < radius + 0.035) return false;
-    if (x < -1.85 || x > 1.85 || z > 0.35 || z < -2.82 || y > 2.45) return false;
+    if (x < WORKSPACE.minX || x > WORKSPACE.maxX ||
+        z < WORKSPACE.minZ || z > WORKSPACE.maxZ || y > WORKSPACE.maxY) return false;
     return !obstacles.some(b => (
       Math.abs(x - b.x) < b.width / 2 + radius &&
       Math.abs(y - b.y) < b.height / 2 + radius &&
