@@ -26,7 +26,7 @@ export function createGame(lab) {
       const Audio = window.AudioContext || window.webkitAudioContext;
       if (!Audio) return;
       if (!audioContext) audioContext = new Audio();
-      if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+      if (audioContext.state === 'suspended') audioContext.resume().catch(() => { });
     } catch (e) { console.warn('Audio no disponible', e); }
   }
   function tone(frequency, delay = 0, duration = .13) {
@@ -96,7 +96,7 @@ export function createGame(lab) {
       const x = t.x + dx, z = t.z + dz;
       const free = pieces.every(other => other === piece ||
         (Math.hypot(other.body.position.x - x, other.body.position.z - z) > .255 ||
-         Math.abs(other.body.position.y - TABLE_TOP) > .65));
+          Math.abs(other.body.position.y - TABLE_TOP) > .65));
       if (free) return { x, y: TABLE_TOP + .17, z };
     }
     return { ...piece.home, y: TABLE_TOP + .33 };
@@ -213,15 +213,19 @@ export function createGame(lab) {
       else if (phase === 'paused') message = 'Partida pausada';
       else message = 'Selecciona, suelta y deja estabilizar la figura';
     }
-    hud.update({ phase, hits, errors, attempts,
+    hud.update({
+      phase, hits, errors, attempts,
       precision: attempts ? (hits / attempts) * 100 : 0,
-      elapsed: elapsedSeconds(now), counts, times, message });
+      elapsed: elapsedSeconds(now), counts, times, message
+    });
     const progress = document.getElementById('preview-progress');
     if (progress) progress.textContent = `${hits}/20 · ${errors} errores · ${elapsedSeconds(now).toFixed(0)} s`;
   }
   function update(dt) { updatePhysicsRules(dt); updateHUD(); }
   updateHUD(true);
-  return { start, pause, resume, reset, onGrab, onRelease, canGrab,
+  return {
+    start, pause, resume, reset, onGrab, onRelease, canGrab,
     unlockAudio, update, get phase() { return phase; },
-    getStats: () => ({ phase, hits, errors, attempts, elapsed: elapsedSeconds(), counts: { ...counts }, times: { ...times } }) };
+    getStats: () => ({ phase, hits, errors, attempts, elapsed: elapsedSeconds(), counts: { ...counts }, times: { ...times } })
+  };
 }
