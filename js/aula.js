@@ -1,9 +1,6 @@
 
 import * as THREE from 'three';
-import {
-  GLTFLoader
-} from 'three/addons/loaders/GLTFLoader.js';
-
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { AULA } from './config.js';
 
 const AULA_URL = new URL(
@@ -11,211 +8,20 @@ const AULA_URL = new URL(
   import.meta.url
 );
 
-// Activar solo para diagnosticar la puerta.
-const DEBUG_PUERTA = false;
-
-// ==========================================
-// UTILIDADES
-// ==========================================
-
-function normalizeText(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
+// Obtener nombres de materiales de una malla.
 function materialNames(mesh) {
-  const mats = Array.isArray(mesh.material)
+  const materials = Array.isArray(mesh.material)
     ? mesh.material
     : [mesh.material];
 
-  return mats.map(m => m?.name || '').join(' ');
+  return materials.map(m => m?.name || '').join(' ');
 }
 
-function hierarchyNames(object) {
-  const names = [];
-  let current = object;
-
-  while (current) {
-    names.push(current.name || '');
-    current = current.parent;
-  }
-
-  return names.join(' / ');
-}
-
-function isReference(object) {
-  let current = object;
-
-  while (current) {
-    if (/^ThomThom(?:_|$)/i.test(current.name || '')) {
-      return true;
-    }
-
-    current = current.parent;
-  }
-
-  return false;
-}
-
-function isDoorMesh(object) {
-  if (!object.isMesh) return false;
-
-  const text = normalizeText(
-    hierarchyNames(object) +
-    ' ' +
-    materialNames(object)
-  );
-
-  return /puerta|door/.test(text);
-}
-
-// ==========================================
-// MATERIAL DE LA PUERTA
-// ==========================================
-
-function fixDoorMaterial(original) {
-  if (!original) return original;
-
-  const mat = original.clone();
-  const name = normalizeText(mat.name);
-
-  const glass =
-    /vidrio|cristal|glass/.test(name);
-
-  mat.side = THREE.DoubleSide;
-
-  if (glass) {
-    mat.transparent = true;
-    mat.opacity = 0.55;
-    mat.depthWrite = false;
-    mat.depthTest = true;
-
-    if (!mat.map && mat.color) {
-      mat.color.set(0xc5e3ef);
-    }
-  } else {
-    // Evitar que una madera de la puerta
-    // quede invisible por transparencia.
-    mat.transparent = false;
-    mat.opacity = 1;
-    mat.depthWrite = true;
-    mat.depthTest = true;
-  }
-
-  if (DEBUG_PUERTA) {
-    mat.color?.set(0xffff00);
-    mat.transparent = false;
-    mat.opacity = 1;
-    mat.depthWrite = true;
-  }
-
-  mat.needsUpdate = true;
-  return mat;
-}
-
-// ==========================================
-// HACER VISIBLE LA PUERTA
-// ==========================================
-
-function fixDoorVisibility(root) {
-  const meshes = [];
-
-  root.traverse(object => {
-    if (!isDoorMesh(object)) return;
-    if (isReference(object)) return;
-
-    meshes.push(object);
-
-    // Mostrar objeto y padres.
-    let current = object;
-
-    while (current) {
-      current.visible = true;
-      current = current.parent;
-    }
-
-    object.frustumCulled = false;
-    object.castShadow = false;
-    object.receiveShadow = false;
-
-    if (Array.isArray(object.material)) {
-      object.material = object.material.map(
-        fixDoorMaterial
-      );
-    } else {
-      object.material = fixDoorMaterial(
-        object.material
-      );
-    }
-
-    console.info(
-      '[PUERTA] Elemento detectado:',
-      object.name,
-      materialNames(object)
-    );
-  });
-
-  return meshes;
-}
-
-// ==========================================
-// ANALIZAR GEOMETRIA DE PUERTA
-// ==========================================
-
-function diagnoseDoor(meshes) {
-  const box = new THREE.Box3();
-
-  for (const mesh of meshes) {
-    mesh.updateWorldMatrix(true, false);
-
-    box.union(
-      new THREE.Box3().setFromObject(mesh)
-    );
-  }
-
-  if (meshes.length === 0 || box.isEmpty()) {
-    console.warn(
-      '[PUERTA] No se encontraron mallas con nombre de puerta.'
-    );
-
-    return {
-      doorFound: false,
-      doorMeshes: 0,
-      box: null
-    };
-  }
-
-  const center = box.getCenter(
-    new THREE.Vector3()
-  );
-
-  const size = box.getSize(
-    new THREE.Vector3()
-  );
-
-  console.info('[PUERTA] Geometria:', {
-    position: center.toArray(),
-    dimensions: size.toArray()
-  });
-
-  return {
-    doorFound: true,
-    doorMeshes: meshes.length,
-    box,
-    center,
-    size
-  };
-}
-
-// ==========================================
-// LOCALIZAR PISO DEL SALON
-// ==========================================
-
+// Localizar el piso del salón para calcular
+// el centro sin incluir objetos externos.
 function floorBounds(root) {
   const floors = new THREE.Box3();
-  let found = false;
+  let hasFloor = false;
 
   root.traverseVisible(object => {
     if (!object.isMesh) return;
@@ -223,279 +29,47 @@ function floorBounds(root) {
     const description =
       `${object.name} ${materialNames(object)}`;
 
-    if (!/(loseta|piso|suelo|floor|tile)/i.test(
-      description
-    )) return;
+    if (!/(loseta|piso|suelo|floor|tile)/i.test(description)) {
+      return;
+    }
 
-    const box = new THREE.Box3()
-      .setFromObject(object);
+    const bounds = new THREE.Box3().setFromObject(object);
+    const size = bounds.getSize(new THREE.Vector3());
 
-    const size = box.getSize(
-      new THREE.Vector3()
-    );
+    if (bounds.isEmpty() || size.x * size.z < 0.02) {
+      return;
+    }
 
-    if (
-      box.isEmpty() ||
-      size.x * size.z < .02
-    ) return;
-
-    floors.union(box);
-    found = true;
+    floors.union(bounds);
+    hasFloor = true;
   });
 
-  if (!found) {
+  if (!hasFloor) {
     throw new Error(
-      'No se encontro el piso de AulaY9.glb'
+      'No se pudo localizar el piso del aula en AulaY9.glb'
     );
   }
 
   return floors;
 }
 
-// ==========================================
-// DIMENSIONES DEL ESCENARIO
-// ==========================================
-
-function architectureBounds(root) {
-  const box = new THREE.Box3();
+// Calcular dimensiones visibles de la arquitectura.
+function visibleArchitectureBounds(root) {
+  const bounds = new THREE.Box3();
 
   root.traverseVisible(object => {
-    if (!object.isMesh) return;
-
-    box.union(
-      new THREE.Box3().setFromObject(object)
-    );
+    if (object.isMesh) {
+      bounds.union(
+        new THREE.Box3().setFromObject(object)
+      );
+    }
   });
 
-  return box;
+  return bounds;
 }
 
 // ==========================================
-// COLISIONADORES DE PAREDES
-// ==========================================
-
-function addWallColliders(physics, floor, doorInfo) {
-  if (!AULA.collisionWalls) {
-    return {
-      count: 0,
-      doorOpeningApplied: false,
-      doorWall: null
-    };
-  }
-
-  const size = floor.getSize(
-    new THREE.Vector3()
-  );
-
-  if (
-    size.x < 3 ||
-    size.z < 3 ||
-    size.x > 20 ||
-    size.z > 20
-  ) {
-    console.warn(
-      '[AULA] Dimensiones de piso inesperadas.'
-    );
-
-    return {
-      count: 0,
-      doorOpeningApplied: false,
-      doorWall: null
-    };
-  }
-
-  const height = AULA.height * AULA.scale;
-  const thickness = AULA.wallThickness;
-
-  const walls = [
-    {
-      name: 'Oeste',
-      axis: 'x',
-      pos: floor.min.x,
-      min: floor.min.z,
-      max: floor.max.z
-    },
-    {
-      name: 'Este',
-      axis: 'x',
-      pos: floor.max.x,
-      min: floor.min.z,
-      max: floor.max.z
-    },
-    {
-      name: 'Norte',
-      axis: 'z',
-      pos: floor.min.z,
-      min: floor.min.x,
-      max: floor.max.x
-    },
-    {
-      name: 'Sur',
-      axis: 'z',
-      pos: floor.max.z,
-      min: floor.min.x,
-      max: floor.max.x
-    }
-  ];
-
-  let count = 0;
-  let doorWall = null;
-  let openingApplied = false;
-
-  function segment(
-    wall,
-    start,
-    end,
-    bottom = 0,
-    top = height
-  ) {
-    const length = end - start;
-    const h = top - bottom;
-
-    if (length <= .025 || h <= .025) return;
-
-    if (wall.axis === 'x') {
-      physics.staticBox(
-        wall.pos,
-        (bottom + top) / 2,
-        (start + end) / 2,
-        thickness,
-        h,
-        length
-      );
-    } else {
-      physics.staticBox(
-        (start + end) / 2,
-        (bottom + top) / 2,
-        wall.pos,
-        length,
-        h,
-        thickness
-      );
-    }
-
-    count++;
-  }
-
-  // ========================================
-  // IDENTIFICAR LA PARED DE LA PUERTA
-  // ========================================
-
-  let selectedWall = null;
-  let openingStart = 0;
-  let openingEnd = 0;
-  let openingTop = 0;
-
-  if (doorInfo.doorFound && doorInfo.box) {
-    const nearest = walls.map(wall => ({
-      wall,
-      distance: wall.axis === 'x'
-        ? Math.abs(doorInfo.center.x - wall.pos)
-        : Math.abs(doorInfo.center.z - wall.pos)
-    })).sort(
-      (a, b) => a.distance - b.distance
-    )[0];
-
-    if (nearest && nearest.distance < .45) {
-      const wall = nearest.wall;
-      const box = doorInfo.box;
-
-      const low = wall.axis === 'x'
-        ? box.min.z
-        : box.min.x;
-
-      const high = wall.axis === 'x'
-        ? box.max.z
-        : box.max.x;
-
-      const span = high - low;
-      const doorHeight = box.max.y - box.min.y;
-
-      // Evitar abrir accidentalmente una pared
-      // por detectar un objeto que no es puerta.
-      if (
-        span >= .65 &&
-        span <= 1.60 &&
-        doorHeight >= 1.80 &&
-        doorHeight <= 3.10 &&
-        box.min.y >= -.10 &&
-        box.min.y <= .25
-      ) {
-        selectedWall = wall;
-
-        openingStart = Math.max(
-          wall.min,
-          low - .025
-        );
-
-        openingEnd = Math.min(
-          wall.max,
-          high + .025
-        );
-
-        openingTop = Math.min(
-          height,
-          box.max.y + .015
-        );
-
-        doorWall = wall.name;
-      }
-    }
-  }
-
-  // ========================================
-  // GENERAR PAREDES Y ABERTURA
-  // ========================================
-
-  for (const wall of walls) {
-    if (wall !== selectedWall) {
-      segment(wall, wall.min, wall.max);
-      continue;
-    }
-
-    // Tramo antes de puerta.
-    segment(
-      wall,
-      wall.min,
-      openingStart
-    );
-
-    // Tramo despues de puerta.
-    segment(
-      wall,
-      openingEnd,
-      wall.max
-    );
-
-    // Dintel superior.
-    if (openingTop < height) {
-      segment(
-        wall,
-        openingStart,
-        openingEnd,
-        openingTop,
-        height
-      );
-    }
-
-    openingApplied = true;
-  }
-
-  if (!openingApplied) {
-    console.warn(
-      '[PUERTA] No se aplico abertura fisica. Revisar el GLB.'
-    );
-  }
-
-  return {
-    count,
-    doorOpeningApplied: openingApplied,
-    doorWall
-  };
-}
-
-// ==========================================
-// CREAR ENTORNO AULA
+// CREACIÓN DEL ENTORNO AULA Y9
 // ==========================================
 
 export function createAulaEnvironment({
@@ -515,11 +89,64 @@ export function createAulaEnvironment({
 
   const loader = new GLTFLoader();
 
+  // Colisionadores físicos simplificados
+  // para las cuatro paredes exteriores.
+  function addWallColliders(floor) {
+    if (!AULA.collisionWalls) return 0;
+
+    const dimensions = floor.getSize(new THREE.Vector3());
+    const w = dimensions.x;
+    const d = dimensions.z;
+
+    if (w < 3 || d < 3 || w > 20 || d > 20) {
+      console.warn(
+        'Dimensiones de piso inesperadas: no se crean paredes físicas.'
+      );
+      return 0;
+    }
+
+    const h = AULA.height * AULA.scale;
+    const t = AULA.wallThickness;
+
+    const x = (floor.min.x + floor.max.x) / 2;
+    const z = (floor.min.z + floor.max.z) / 2;
+
+    // Pared izquierda.
+    physics.staticBox(
+      x - w / 2, h / 2, z,
+      t, h, d
+    );
+
+    // Pared derecha.
+    physics.staticBox(
+      x + w / 2, h / 2, z,
+      t, h, d
+    );
+
+    // Pared del fondo.
+    physics.staticBox(
+      x, h / 2, z - d / 2,
+      w, h, t
+    );
+
+    // Pared frontal.
+    physics.staticBox(
+      x, h / 2, z + d / 2,
+      w, h, t
+    );
+
+    // La puerta no tiene un paso físico
+    // individualmente modelado.
+    return 4;
+  }
+
+  // ========================================
+  // CARGAR MODELO GLB
+  // ========================================
+
   async function load() {
     try {
-      const gltf = await loader.loadAsync(
-        AULA_URL.href
-      );
+      const gltf = await loader.loadAsync(AULA_URL.href);
 
       if (!gltf.scene) {
         throw new Error(
@@ -530,36 +157,24 @@ export function createAulaEnvironment({
       root = gltf.scene;
       root.name = 'AulaY9-SketchUp';
 
-      // ====================================
-      // OCULTAR FIGURA HUMANA DE REFERENCIA
-      // ====================================
-
+      // Ocultar figura humana de referencia
+      // exportada desde SketchUp.
       let hiddenReference = false;
 
       root.traverse(object => {
-        if (/^ThomThom(?:_|$)/i.test(
-          object.name || ''
-        )) {
+        if (/^ThomThom(?:_|$)/i.test(object.name || '')) {
           object.visible = false;
           hiddenReference = true;
         }
       });
 
-      // ====================================
-      // ESCALA Y ROTACION
-      // ====================================
-
+      // Mantener escala y orientación.
       root.rotation.y = AULA.rotationY;
       root.scale.setScalar(AULA.scale);
-
       root.updateMatrixWorld(true);
 
-      // ====================================
-      // CENTRAR SALON CON SU PISO
-      // ====================================
-
+      // Centrar el salón utilizando el piso.
       const originalFloor = floorBounds(root);
-
       const center = originalFloor.getCenter(
         new THREE.Vector3()
       );
@@ -572,10 +187,8 @@ export function createAulaEnvironment({
 
       root.updateMatrixWorld(true);
 
-      // ====================================
-      // MATERIALES GENERALES
-      // ====================================
-
+      // Hacer visibles las superficies
+      // interiores del modelo.
       root.traverseVisible(object => {
         if (!object.isMesh) return;
 
@@ -586,87 +199,46 @@ export function createAulaEnvironment({
           ? object.material
           : [object.material];
 
-        materials.forEach(mat => {
-          if (!mat) return;
+        for (const material of materials) {
+          if (!material) continue;
 
-          mat.side = THREE.DoubleSide;
-          mat.needsUpdate = true;
-        });
+          material.side = THREE.DoubleSide;
+          material.needsUpdate = true;
+        }
       });
 
-      // ====================================
-      // PUERTA
-      // ====================================
-
-      const doorMeshes = fixDoorVisibility(root);
-
-      root.updateMatrixWorld(true);
-
-      const doorInfo = diagnoseDoor(
-        doorMeshes
-      );
-
-      // ====================================
-      // AGREGAR SALON A LA ESCENA
-      // ====================================
-
+      // Agregar el aula a Three.js.
       scene.add(root);
 
+      // Ocultar el piso antiguo de NEXUS VR.
+      // El plano físico original se mantiene.
       floorMesh.visible = false;
       grid.visible = false;
 
+      // Diagnóstico de dimensiones.
       const placedFloor = floorBounds(root);
-
       const roomSize = placedFloor.getSize(
         new THREE.Vector3()
       );
 
-      const building = architectureBounds(root);
-
-      const buildingSize = building.getSize(
+      const architecture = visibleArchitectureBounds(root);
+      const builtSize = architecture.getSize(
         new THREE.Vector3()
       );
 
-      // ====================================
-      // COLISIONES
-      // ====================================
-
-      const colliders = addWallColliders(
-        physics,
-        placedFloor,
-        doorInfo
-      );
+      // Crear paredes físicas.
+      const wallColliders = addWallColliders(placedFloor);
 
       loaded = true;
 
       diagnostics = {
         loaded: true,
         url: AULA_URL.href,
-
-        width: Number(
-          roomSize.x.toFixed(2)
-        ),
-
-        depth: Number(
-          roomSize.z.toFixed(2)
-        ),
-
-        height: Number(
-          buildingSize.y.toFixed(2)
-        ),
-
-        wallColliders: colliders.count,
-
-        doorFound: doorInfo.doorFound,
-        doorMeshes: doorInfo.doorMeshes,
-
-        doorOpeningApplied:
-          colliders.doorOpeningApplied,
-
-        doorWall: colliders.doorWall,
-
+        width: Number(roomSize.x.toFixed(2)),
+        depth: Number(roomSize.z.toFixed(2)),
+        height: Number(builtSize.y.toFixed(2)),
+        wallColliders,
         hiddenReference,
-
         scale: AULA.scale,
         rotationY: AULA.rotationY
       };
@@ -676,11 +248,20 @@ export function createAulaEnvironment({
         diagnostics
       );
 
+      if (
+        Math.abs(roomSize.x - AULA.width * AULA.scale) > 0.15 ||
+        Math.abs(roomSize.z - AULA.depth * AULA.scale) > 0.15
+      ) {
+        console.warn(
+          'La escala o rotación del aula no coincide con la ficha del GLB.'
+        );
+      }
+
       return { ...diagnostics };
 
     } catch (error) {
       console.error(
-        '[AULA] Error al cargar:',
+        'No se pudo cargar el aula; sigue disponible NEXUS VR sin arquitectura:',
         error
       );
 
@@ -689,7 +270,6 @@ export function createAulaEnvironment({
       }
 
       root = null;
-      loaded = false;
 
       diagnostics = {
         loaded: false,

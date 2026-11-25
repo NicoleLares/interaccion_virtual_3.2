@@ -20,19 +20,18 @@ export function createGame(lab) {
   let hits = 0;
   let errors = 0;
   let attempts = 0;
-
   let elapsed = 0;
   let runStart = 0;
-  let lastHudAt = 0;
-  let noticeUntil = 0;
 
   let message = 'Pulsa COMENZAR dentro del laboratorio';
+  let noticeUntil = 0;
   let audioContext = null;
+  let lastHudAt = 0;
 
   const nowMs = () => performance.now();
 
   // ==========================================
-  // TIEMPO Y MENSAJES
+  // CRONOMETRO Y MENSAJES
   // ==========================================
 
   function elapsedSeconds(now = nowMs()) {
@@ -80,7 +79,6 @@ export function createGame(lab) {
     ) return;
 
     const when = audioContext.currentTime + delay;
-
     const oscillator = audioContext.createOscillator();
     const gain = audioContext.createGain();
 
@@ -125,7 +123,7 @@ export function createGame(lab) {
   }
 
   // ==========================================
-  // INICIAR, PAUSAR Y REANUDAR
+  // INICIO, PAUSA Y REANUDACION
   // ==========================================
 
   function start() {
@@ -164,7 +162,7 @@ export function createGame(lab) {
   // ==========================================
 
   function isPyramid(piece) {
-    const text = String(
+    const name = String(
       `${piece.category || ''} ${piece.categoryName || ''}`
     )
       .normalize('NFD')
@@ -172,13 +170,13 @@ export function createGame(lab) {
       .toLowerCase();
 
     return (
-      text.includes('piramid') ||
-      text.includes('pyramid')
+      name.includes('piramid') ||
+      name.includes('pyramid')
     );
   }
 
   // ==========================================
-  // RESTAURAR COLOR DE LA FIGURA
+  // RESTAURAR COLOR DE UNA FIGURA
   // ==========================================
 
   function restorePieceColor(piece) {
@@ -193,7 +191,7 @@ export function createGame(lab) {
   }
 
   // ==========================================
-  // AGARRAR Y SOLTAR
+  // AGARRAR FIGURAS
   // ==========================================
 
   function canGrab(piece) {
@@ -208,11 +206,13 @@ export function createGame(lab) {
   function onGrab(piece) {
     if (!canGrab(piece)) return false;
 
+    // Guardar el color original la primera vez.
     if (piece.originalEmissiveColor == null) {
       piece.originalEmissiveColor =
         piece.mesh.material.emissive.getHex();
     }
 
+    // Permite recuperar figuras equivocadas.
     restorePieceColor(piece);
 
     piece.state = 'held';
@@ -242,13 +242,11 @@ export function createGame(lab) {
   }
 
   // ==========================================
-  // RECUPERACION EN MESA DE ORIGEN
+  // RECUPERAR FIGURAS DEL SUELO
   // ==========================================
 
   function findRecoveryPosition(piece) {
-    const table = TABLES[piece.tableIndex];
-
-    if (!table) return piece.home;
+    const t = TABLES[piece.tableIndex];
 
     const options = [
       [-.36, -.14],
@@ -262,8 +260,8 @@ export function createGame(lab) {
     ];
 
     for (const [dx, dz] of options) {
-      const x = table.x + dx;
-      const z = table.z + dz;
+      const x = t.x + dx;
+      const z = t.z + dz;
 
       const free = pieces.every(other =>
         other === piece ||
@@ -302,12 +300,12 @@ export function createGame(lab) {
     restorePieceColor(piece);
 
     piece.floorSince = null;
-    piece.stillFor = 0;
     piece.containedFor = 0;
+    piece.stillFor = 0;
   }
 
   // ==========================================
-  // REINICIAR
+  // REINICIAR PARTIDA
   // ==========================================
 
   function reset() {
@@ -329,20 +327,16 @@ export function createGame(lab) {
     }
 
     lab.resetPositions();
-    lab.physics.resetClock();
 
     pieces.forEach(piece => {
       restorePieceColor(piece);
-
       piece.floorSince = null;
-      piece.stillFor = 0;
       piece.containedFor = 0;
+      piece.stillFor = 0;
       piece.enteredFromTop = false;
-      piece.recoveryAt = null;
-
-      piece.releaseId = 0;
-      piece.countedReleaseId = -1;
     });
+
+    lab.physics.resetClock();
 
     notify(
       'Nueva distribución. Pulsa COMENZAR.',
@@ -353,7 +347,7 @@ export function createGame(lab) {
   }
 
   // ==========================================
-  // COMPROBAR POSICION EN RECIPIENTE
+  // VALIDAR POSICION EN LA CAJA
   // ==========================================
 
   function isHorizontallyInside(piece, bin) {
@@ -366,6 +360,7 @@ export function createGame(lab) {
     return (
       Math.abs(p.x - bin.x) <=
         bin.width / 2 - margin &&
+
       Math.abs(p.z - bin.z) <=
         bin.depth / 2 - margin
     );
@@ -378,12 +373,12 @@ export function createGame(lab) {
       return false;
     }
 
-    // Las piramides pueden terminar
+    // Las piramides pueden quedar
     // inclinadas o recostadas.
     if (isPyramid(piece)) {
       return (
         p.y >= bin.floor + .025 &&
-        p.y <= bin.rim + .08
+        p.y <= bin.rim + .10
       );
     }
 
@@ -393,10 +388,17 @@ export function createGame(lab) {
     );
   }
 
-  function hasValidEntry(piece, bin) {
-    if (piece.enteredFromTop) return true;
+  // ==========================================
+  // COMPROBAR ENTRADA AL RECIPIENTE
+  // ==========================================
 
-    // Tolerancia para piramides.
+  function hasValidEntry(piece, bin) {
+    if (piece.enteredFromTop) {
+      return true;
+    }
+
+    // Para piramides, permitir el conteo
+    // si su centro ya esta dentro del bote.
     if (isPyramid(piece)) {
       return (
         isContained(piece, bin) &&
@@ -408,7 +410,7 @@ export function createGame(lab) {
   }
 
   // ==========================================
-  // DETECTAR ESTABILIDAD
+  // ESTABILIDAD DE FIGURAS
   // ==========================================
 
   function isStable(piece) {
@@ -419,20 +421,20 @@ export function createGame(lab) {
       v.x, v.y, v.z
     );
 
-    const rotation = Math.hypot(
+    const rotationSpeed = Math.hypot(
       av.x, av.y, av.z
     );
 
     if (isPyramid(piece)) {
       return (
         speed < .32 &&
-        rotation < 1.4
+        rotationSpeed < 1.4
       );
     }
 
     return (
       speed < .19 &&
-      rotation < .8
+      rotationSpeed < .8
     );
   }
 
@@ -441,8 +443,7 @@ export function createGame(lab) {
   // ==========================================
 
   function registerAttempt(piece, bin) {
-    // Nunca contar dos veces la misma
-    // liberacion de una figura.
+    // Un intento por cada liberacion.
     if (
       piece.countedReleaseId ===
       piece.releaseId
@@ -454,7 +455,7 @@ export function createGame(lab) {
     if (piece.category === bin.id) {
 
       // ====================================
-      // FIGURA CORRECTA
+      // CLASIFICACION CORRECTA
       // ====================================
 
       hits++;
@@ -473,10 +474,15 @@ export function createGame(lab) {
       );
 
       console.log(
-        `[CORRECTO] ${piece.categoryName} ${counts[bin.id]}/5`
+        `[CORRECTO] ${piece.categoryName}: ${counts[bin.id]}/5`
       );
 
+      // ====================================
+      // CAJA COMPLETA
+      // ====================================
+
       if (counts[bin.id] === 5) {
+
         times[bin.id] = elapsedSeconds();
 
         lab.markBinComplete?.(
@@ -490,7 +496,12 @@ export function createGame(lab) {
         );
       }
 
+      // ====================================
+      // OBJETIVO LOGRADO
+      // ====================================
+
       if (hits === 20) {
+
         elapsed = elapsedSeconds();
         phase = 'completed';
 
@@ -505,13 +516,16 @@ export function createGame(lab) {
     } else {
 
       // ====================================
-      // FIGURA EN CAJA EQUIVOCADA
+      // CAJA INCORRECTA
       // ====================================
 
       errors++;
 
-      // La figura permanece donde cayo.
-      // Puede ser agarrada nuevamente.
+      // NUEVA LOGICA:
+      // La figura queda en el recipiente.
+      // No se programa ninguna recuperacion.
+      // Se puede volver a agarrar.
+
       piece.state = 'misplaced';
       piece.recoveryAt = null;
 
@@ -525,17 +539,20 @@ export function createGame(lab) {
       );
 
       piece.mesh.material.emissiveIntensity = .60;
+
+      // El color rojo desaparece,
+      // pero la figura permanece en la caja.
       piece.warningUntil = nowMs() + 2400;
 
       sound('error');
 
       notify(
-        `¡Caja equivocada! Recoge ${piece.categoryName} y vuelve a intentarlo.`,
+        `¡Caja equivocada! ${piece.categoryName}. Recógela y corrígela.`,
         2600
       );
 
       console.log(
-        `[ERROR] ${piece.categoryName} en ${bin.name}`
+        `[ERROR] ${piece.categoryName} en ${bin.name}. La figura permanece en la caja.`
       );
     }
 
@@ -543,7 +560,7 @@ export function createGame(lab) {
   }
 
   // ==========================================
-  // RECUPERACION DE CAIDAS
+  // PROTECCION CONTRA CAIDAS
   // ==========================================
 
   const FLOOR_THRESHOLD = .33;
@@ -561,20 +578,22 @@ export function createGame(lab) {
 
     for (const piece of pieces) {
 
+      // ====================================
+      // RECUPERAR FIGURA CAIDA
+      // ====================================
+
       if (piece.state === 'recovering') {
         if (now >= piece.recoveryAt) {
           restore(piece);
         }
-
         continue;
       }
 
+      // Figuras clasificadas o sujetadas.
       if (
         piece.state === 'classified' ||
         piece.state === 'held'
-      ) {
-        continue;
-      }
+      ) continue;
 
       const p = piece.body.position;
 
@@ -591,10 +610,11 @@ export function createGame(lab) {
       }
 
       // ====================================
-      // CAIDA AL SUELO
+      // FIGURA QUE CAE AL SUELO
       // ====================================
 
       if (p.y < FLOOR_THRESHOLD) {
+
         if (piece.floorSince == null) {
           piece.floorSince = now;
         }
@@ -628,26 +648,29 @@ export function createGame(lab) {
       piece.floorSince = null;
 
       // ====================================
-      // FIGURA EQUIVOCADA
+      // PIEZA EN CAJA INCORRECTA
       // ====================================
 
       if (piece.state === 'misplaced') {
-        // No vuelve a su mesa por error.
-        // Conserva la simulacion fisica.
-        // El usuario puede recuperarla.
+        // No se devuelve a su mesa.
+        // No cuenta nuevamente el mismo error.
+        // Solo se mueve mediante la fisica,
+        // o cuando el usuario la agarre.
       }
 
       // ====================================
-      // FIGURA RECIEN SOLTADA
+      // CLASIFICAR PIEZAS RECIEN SOLTADAS
       // ====================================
 
       else if (
         piece.state === 'released' ||
         piece.state === 'stabilizing'
       ) {
+
         let inside = null;
 
         for (const bin of bins) {
+
           if (
             isHorizontallyInside(piece, bin) &&
             p.y >= bin.rim - .04
@@ -661,7 +684,11 @@ export function createGame(lab) {
           }
         }
 
-        if (inside && hasValidEntry(piece, inside)) {
+        if (
+          inside &&
+          hasValidEntry(piece, inside)
+        ) {
+
           piece.containedFor =
             (piece.containedFor || 0) +
             Math.min(dt, .065);
@@ -678,19 +705,27 @@ export function createGame(lab) {
             ? .45
             : .64;
 
-          // Ayuda a registrar piramides
-          // que sigan oscilando ligeramente.
-          const v = piece.body.velocity;
-          const av = piece.body.angularVelocity;
-
+          // Una piramide puede presentar
+          // pequeñas oscilaciones al apoyarse.
           const pyramidFallback =
             isPyramid(piece) &&
             piece.containedFor >= 1.8 &&
             Math.hypot(
-              v.x, v.y, v.z
+              p.x - inside.x,
+              p.z - inside.z
+            ) < Math.min(
+              inside.width,
+              inside.depth
+            ) / 2 - .055 &&
+            Math.hypot(
+              piece.body.velocity.x,
+              piece.body.velocity.y,
+              piece.body.velocity.z
             ) < .5 &&
             Math.hypot(
-              av.x, av.y, av.z
+              piece.body.angularVelocity.x,
+              piece.body.angularVelocity.y,
+              piece.body.angularVelocity.z
             ) < 2.5;
 
           if (
@@ -701,6 +736,7 @@ export function createGame(lab) {
           }
 
         } else {
+
           piece.stillFor = 0;
           piece.containedFor = 0;
           piece.state = 'released';
@@ -720,14 +756,14 @@ export function createGame(lab) {
         restore(piece);
 
         notify(
-          'Figura recuperada de los limites del laboratorio.'
+          'Pieza recuperada de los límites del laboratorio.'
         );
       }
     }
   }
 
   // ==========================================
-  // PANEL HUD
+  // ACTUALIZAR PANEL HUD
   // ==========================================
 
   function updateHUD(force = false) {
@@ -761,10 +797,11 @@ export function createGame(lab) {
       attempts,
 
       precision: attempts
-        ? hits / attempts * 100
+        ? (hits / attempts) * 100
         : 0,
 
       elapsed: elapsedSeconds(now),
+
       counts,
       times,
       message
@@ -784,6 +821,10 @@ export function createGame(lab) {
     }
   }
 
+  // ==========================================
+  // ACTUALIZACION GENERAL
+  // ==========================================
+
   function update(dt) {
     updatePhysicsRules(dt);
     updateHUD();
@@ -791,16 +832,11 @@ export function createGame(lab) {
 
   updateHUD(true);
 
-  // ==========================================
-  // API PUBLICA
-  // ==========================================
-
   return {
     start,
     pause,
     resume,
     reset,
-
     onGrab,
     onRelease,
     canGrab,
