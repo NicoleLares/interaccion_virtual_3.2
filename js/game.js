@@ -2,7 +2,10 @@
 import {
   CATEGORIES,
   TABLES,
-  TABLE_TOP
+  TABLE_TOP,
+  localToWorldXZ,
+  insideBinXZ,
+  WORKSPACE
 } from './config.js';
 
 export function createGame(lab) {
@@ -260,8 +263,7 @@ export function createGame(lab) {
     ];
 
     for (const [dx, dz] of options) {
-      const x = t.x + dx;
-      const z = t.z + dz;
+      const { x, z } = localToWorldXZ(t, dx, dz);
 
       const free = pieces.every(other =>
         other === piece ||
@@ -357,13 +359,7 @@ export function createGame(lab) {
       ? .055
       : .075;
 
-    return (
-      Math.abs(p.x - bin.x) <=
-        bin.width / 2 - margin &&
-
-      Math.abs(p.z - bin.z) <=
-        bin.depth / 2 - margin
-    );
+    return insideBinXZ(bin, p.x, p.z, margin);
   }
 
   function isContained(piece, bin) {
@@ -748,9 +744,10 @@ export function createGame(lab) {
       // ====================================
 
       if (
-        Math.abs(p.x) > 4 ||
-        p.z > 2 ||
-        p.z < -4.5 ||
+        p.x < WORKSPACE.minX - .45 ||
+        p.x > WORKSPACE.maxX + .45 ||
+        p.z > WORKSPACE.maxZ + .45 ||
+        p.z < WORKSPACE.minZ - .45 ||
         p.y < -.9
       ) {
         restore(piece);

@@ -1,6 +1,5 @@
 
 import * as THREE from "three";
-import { RAY_MAX_DISTANCE } from "./config.js";
 
 import {
   XRHandModelFactory
@@ -88,7 +87,7 @@ export function createHands(renderer, scene) {
 
       setRayDistance(distance) {
         const d = THREE.MathUtils.clamp(
-          distance, 0.03, RAY_MAX_DISTANCE
+          distance, 0.1, 5
         );
 
         laser.scale.z = d;

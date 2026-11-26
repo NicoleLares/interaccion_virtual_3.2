@@ -5,7 +5,6 @@ import { createLaboratoryScene } from './scene.js';
 import { createHands } from './hands.js';
 import { createGame } from './game.js';
 import { createInteraction } from './interaction.js';
-import { TABLES } from './config.js';
 
 import {
   setRenderStatus,
@@ -34,11 +33,9 @@ const previewReset =
 // ==========================================
 
 async function initialize() {
-
   let renderer;
 
   try {
-
     renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: 'high-performance'
@@ -63,7 +60,6 @@ async function initialize() {
     container.appendChild(renderer.domElement);
 
   } catch (err) {
-
     setRenderStatus(
       `Error al iniciar WebGL: ${err.message}`
     );
@@ -74,7 +70,6 @@ async function initialize() {
     );
 
     console.error(err);
-
     return;
   }
 
@@ -85,41 +80,15 @@ async function initialize() {
   const lab = createLaboratoryScene();
 
   // ========================================
-  // CENTRO DE LAS CUATRO MESAS
-  // ========================================
-
-  const centerX = TABLES.reduce(
-    (sum, table) => sum + table.x,
-    0
-  ) / TABLES.length;
-
-  const centerZ = TABLES.reduce(
-    (sum, table) => sum + table.z,
-    0
-  ) / TABLES.length;
-
-  let spawnPending = false;
-  let baseReferenceSpace = null;
-
-  console.log('Centro del usuario VR:', {
-    x: centerX,
-    z: centerZ
-  });
-
-  // ========================================
   // CARGAR AULA Y9
   // ========================================
 
   lab.loadAula().then(result => {
-
     if (result.loaded) {
-
       setRenderStatus(
         `Aula Y9 cargada (${result.width} × ${result.depth} m) · física 3D activa`
       );
-
     } else {
-
       setRenderStatus(
         'Falta AulaY9.glb: vista NEXUS original · física 3D activa'
       );
@@ -127,9 +96,7 @@ async function initialize() {
       console.info(
         'Exporta AulaY9.skp como GLB y colócalo en assets/models/AulaY9.glb.'
       );
-
     }
-
   });
 
   // ========================================
@@ -144,13 +111,11 @@ async function initialize() {
   );
 
   async function exitVR() {
-
     const session = renderer.xr.getSession();
 
     if (session) {
       await session.end();
     }
-
   }
 
   const interaction = createInteraction(
@@ -169,20 +134,16 @@ async function initialize() {
   previewStart.addEventListener(
     'click',
     () => {
-
       game.start();
       game.unlockAudio();
-
     }
   );
 
   previewReset.addEventListener(
     'click',
     () => {
-
       interaction.releaseAll();
       game.reset();
-
     }
   );
 
@@ -191,7 +152,6 @@ async function initialize() {
   // ========================================
 
   function resize() {
-
     const width = Math.max(
       container.clientWidth,
       1
@@ -211,24 +171,17 @@ async function initialize() {
     lab.camera.aspect = width / height;
 
     lab.camera.updateProjectionMatrix();
-
   }
 
   resize();
 
   if ('ResizeObserver' in window) {
-
-    new ResizeObserver(resize).observe(
-      container
-    );
-
+    new ResizeObserver(resize).observe(container);
   } else {
-
     window.addEventListener(
       'resize',
       resize
     );
-
   }
 
   // ========================================
@@ -237,102 +190,32 @@ async function initialize() {
 
   let previous = null;
 
-  renderer.setAnimationLoop((time, frame) => {
-
-    // ======================================
-    // POSICIONAR USUARIO EN EL CENTRO
-    // DE LAS CUATRO MESAS
-    // ======================================
-
-    if (
-      renderer.xr.isPresenting &&
-      spawnPending &&
-      frame &&
-      baseReferenceSpace
-    ) {
-
-      const pose = frame.getViewerPose(
-        baseReferenceSpace
-      );
-
-      if (pose) {
-
-        const position =
-          pose.transform.position;
-
-        const offset = new XRRigidTransform({
-
-          x: position.x - centerX,
-
-          y: 0,
-
-          z: position.z - centerZ
-
-        });
-
-        const centeredReferenceSpace =
-          baseReferenceSpace.getOffsetReferenceSpace(
-            offset
-          );
-
-        renderer.xr.setReferenceSpace(
-          centeredReferenceSpace
-        );
-
-        spawnPending = false;
-
-        previous = null;
-
-        console.log(
-          'Usuario VR centrado entre las mesas.'
-        );
-
-        // Esperar al siguiente frame para que
-        // cámara, manos y rayos estén alineados.
-
-        return;
-
-      }
-
-    }
-
-    // ======================================
-    // TIEMPO DE SIMULACIÓN
-    // ======================================
-
+  renderer.setAnimationLoop(time => {
     const t = time / 1000;
 
     const dt = previous === null
       ? 0
       : Math.min(
-          Math.max(t - previous, 0),
-          0.055
-        );
+        Math.max(t - previous, 0),
+        0.055
+      );
 
     previous = t;
 
     // Actualizar manos solo en VR.
-
     if (renderer.xr.isPresenting) {
-
       interaction.update();
-
     }
 
     // Simulación física.
-
     if (game.phase !== 'paused') {
-
       lab.physics.step(dt);
-
     }
 
     // Sincronizar figuras con cuerpos físicos.
-
     lab.sync();
 
     // Actualizar juego y escenario.
-
     game.update(dt);
     lab.update(t);
 
@@ -340,7 +223,6 @@ async function initialize() {
       lab.scene,
       lab.camera
     );
-
   });
 
   setRenderStatus(
@@ -352,18 +234,14 @@ async function initialize() {
   // ========================================
 
   if (!window.isSecureContext) {
-
     setCompatibility(
       'Requiere HTTPS o localhost.',
       false
     );
-
     return;
-
   }
 
   if (!navigator.xr) {
-
     setCompatibility(
       'WebXR no disponible en este navegador.',
       false
@@ -374,26 +252,19 @@ async function initialize() {
     );
 
     return;
-
   }
 
   let supportsVR = false;
 
   try {
-
-    supportsVR =
-      await navigator.xr.isSessionSupported(
-        'immersive-vr'
-      );
-
+    supportsVR = await navigator.xr.isSessionSupported(
+      'immersive-vr'
+    );
   } catch (err) {
-
     console.warn('WebXR:', err);
-
   }
 
   if (!supportsVR) {
-
     setCompatibility(
       'Este navegador no admite immersive-vr.',
       false
@@ -404,7 +275,6 @@ async function initialize() {
     );
 
     return;
-
   }
 
   setCompatibility(
@@ -423,17 +293,6 @@ async function initialize() {
   renderer.xr.addEventListener(
     'sessionstart',
     () => {
-
-      // Obtener el espacio de referencia original.
-
-      baseReferenceSpace =
-        renderer.xr.getReferenceSpace();
-
-      // Centrar al usuario una vez por sesión.
-
-      spawnPending =
-        Boolean(baseReferenceSpace);
-
       interaction.resume();
 
       enterVR.disabled = false;
@@ -442,7 +301,6 @@ async function initialize() {
       setVRMessage(
         'Sesión activa. Pulsa COMENZAR en el panel 3D.'
       );
-
     }
   );
 
@@ -453,24 +311,15 @@ async function initialize() {
   renderer.xr.addEventListener(
     'sessionend',
     () => {
-
-      spawnPending = false;
-
-      baseReferenceSpace = null;
-
       interaction.stop();
-
       previous = null;
 
       enterVR.disabled = false;
-
-      enterVR.textContent =
-        'Entrar a realidad virtual';
+      enterVR.textContent = 'Entrar a realidad virtual';
 
       setVRMessage(
         'Sesión cerrada. El progreso se conserva y el tiempo queda en pausa.'
       );
-
     }
   );
 
@@ -481,17 +330,12 @@ async function initialize() {
   enterVR.addEventListener(
     'click',
     async () => {
-
       enterVR.disabled = true;
 
       try {
-
         if (renderer.xr.isPresenting) {
-
           await exitVR();
-
           return;
-
         }
 
         game.unlockAudio();
@@ -500,31 +344,21 @@ async function initialize() {
           await navigator.xr.requestSession(
             'immersive-vr',
             {
-
               requiredFeatures: [
                 'local-floor',
                 'hand-tracking'
               ]
-
             }
           );
 
         try {
-
-          await renderer.xr.setSession(
-            session
-          );
-
+          await renderer.xr.setSession(session);
         } catch (error) {
-
           await session.end();
-
           throw error;
-
         }
 
       } catch (err) {
-
         console.error(
           'No se pudo iniciar VR:',
           err
@@ -535,26 +369,20 @@ async function initialize() {
         );
 
         enterVR.disabled = false;
-
       }
-
     }
   );
 
   // ========================================
-  // CERRAR SESIÓN AL SALIR DE LA PÁGINA
+  // CERRAR SESIÓN SI SALE DE LA PÁGINA
   // ========================================
 
   window.addEventListener(
     'beforeunload',
     () => {
-
       if (renderer.xr.getSession()) {
-
         exitVR();
-
       }
-
     }
   );
 
@@ -565,9 +393,7 @@ async function initialize() {
   window.__nexusDebug = {
 
     summary() {
-
       return {
-
         objects: lab.pieces.length,
 
         bins: lab.bins.length,
@@ -575,48 +401,32 @@ async function initialize() {
         tables: lab.tables.length,
 
         categories: Object.fromEntries(
-
           [...new Set(
-            lab.pieces.map(
-              p => p.category
-            )
+            lab.pieces.map(p => p.category)
           )].map(c => [
-
             c,
-
             lab.pieces.filter(
               p => p.category === c
             ).length
-
           ])
-
         ),
 
         game: game.getStats(),
 
         physicsBodies:
           lab.physics.world.bodies.length
-
       };
-
     },
 
     reset() {
-
       interaction.releaseAll();
-
       game.reset();
-
     },
 
     aula() {
-
       return lab.getAulaStatus();
-
     }
-
   };
-
 }
 
 // ==========================================
@@ -624,7 +434,6 @@ async function initialize() {
 // ==========================================
 
 initialize().catch(error => {
-
   console.error(
     'Error crítico de inicio:',
     error
@@ -637,5 +446,4 @@ initialize().catch(error => {
   setVRMessage(
     'Consulta Console en herramientas del navegador.'
   );
-
 });

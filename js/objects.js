@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { CATEGORIES, TABLES, TABLE_TOP } from './config.js';
+import { CATEGORIES, TABLES, TABLE_TOP, localToWorldXZ } from './config.js';
 
 function pyramidShape() {
   const r = 0.105, h = 0.23;
@@ -94,8 +94,9 @@ export function createPieces(scene, physics) {
       groups[tableIndex].forEach((categoryId, index) => {
         const p = shuffledByClass[categoryId].pop();
         const slot = positions[index];
-        const x = table.x + slot.x + (Math.random() - .5) * .026;
-        const z = table.z + slot.z + (Math.random() - .5) * .024;
+        const { x, z } = localToWorldXZ(table,
+          slot.x + (Math.random() - .5) * .026,
+          slot.z + (Math.random() - .5) * .024);
         const y = TABLE_TOP + 0.133;
         p.home = { x, y, z };
         p.tableIndex = tableIndex;
@@ -110,6 +111,7 @@ export function createPieces(scene, physics) {
     body.mass = 0.38;
     body.updateMassProperties();
     body.position.set(position.x, position.y, position.z);
+    body.aabbNeedsUpdate = true;
     body.quaternion.set(0, 0, 0, 1);
     body.velocity.setZero();
     body.angularVelocity.setZero();

@@ -1,14 +1,14 @@
 
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { WORKSPACE, RAY_MAX_DISTANCE } from './config.js';
+import { WORKSPACE, insideBinXZ } from './config.js';
 
 // Manipulacion cinemática con raycasting + pinza WebXR.
 // Mantiene las piezas fisicas, pero hace el seguimiento de la mano mas agil.
 export function createInteraction(lab, hands, game, options = {}) {
   const raycaster = new THREE.Raycaster();
   raycaster.near = 0.03;
-  raycaster.far = RAY_MAX_DISTANCE;
+  raycaster.far = 3.6;
 
   const rayOrigin = new THREE.Vector3();
   const rayDirection = new THREE.Vector3();
@@ -47,9 +47,11 @@ export function createInteraction(lab, hands, game, options = {}) {
   }
 
   function nearestButton() {
-    // Los botones son hijos del HUD: actualizar sus matrices antes de apuntar.
-    lab.hud.group.updateWorldMatrix(true, true);
+    // El marcador está ahora junto al pizarrón, más lejos del centro.
+    const oldFar = raycaster.far;
+    raycaster.far = 5.0;
     const hit = raycaster.intersectObjects(lab.hud.buttons, false)[0];
+    raycaster.far = oldFar;
     return hit ? { button: hit.object, distance: hit.distance } : null;
   }
 
@@ -138,8 +140,7 @@ export function createInteraction(lab, hands, game, options = {}) {
 
       for (const bin of lab.bins) {
         const insideOpening =
-          Math.abs(accepted.x - bin.x) < bin.width / 2 - 0.075 &&
-          Math.abs(accepted.z - bin.z) < bin.depth / 2 - 0.075;
+          insideBinXZ(bin, accepted.x, accepted.z, .075);
         if (insideOpening && accepted.y >= bin.rim - 0.035) {
           piece.enteredFromTop = true;
         }

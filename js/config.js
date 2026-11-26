@@ -6,21 +6,32 @@ export const CATEGORIES = [
   { id: 'prisma', name: 'PRISMAS', color: 0xb08aff, css: '#b08aff' }
 ];
 
-// Centro de la estación frente al pizarrón de AulaY9.glb.
-// El aula gira 180° para que el pizarrón quede frente a la vista WebXR (-Z).
-export const STATION = { x: -0.33, z: -1.25 };
+// Coordenadas del aula centrada: -Z hacia el pizarrón.
+export const DIAGONAL_ANGLE = 40 * Math.PI / 180;
+export const FIGURE_STATION = { x: -1.45, z: -1.15, rotationY: DIAGONAL_ANGLE };
+export const BIN_STATION = { x: 1.55, z: -1.45, rotationY: -DIAGONAL_ANGLE };
+export const HUD_POSITION = { x: -0.33, y: 2.15, z: -3.86 };
 
-// El marco del pizarrón queda en z ≈ -4.068 m después del giro.
-// El HUD queda 8.8 cm por delante; se conserva su tamaño original.
-export const HUD_POSITION = { x: -0.33, y: 1.95, z: -3.98 };
-export const RAY_MAX_DISTANCE = 6;
+// Transformaciones compartidas por mallas, cuerpos físicos y reglas del juego.
+export function localToWorldXZ(frame, x, z) {
+  const c = Math.cos(frame.rotationY || 0), s = Math.sin(frame.rotationY || 0);
+  return { x: frame.x + c*x + s*z, z: frame.z - s*x + c*z };
+}
+export function worldToLocalXZ(frame, x, z) {
+  const c = Math.cos(frame.rotationY || 0), s = Math.sin(frame.rotationY || 0);
+  const dx = x - frame.x, dz = z - frame.z;
+  return { x: c*dx - s*dz, z: s*dx + c*dz };
+}
+export function insideBinXZ(bin, x, z, margin = .075) {
+  const local = worldToLocalXZ(bin, x, z);
+  return Math.abs(local.x) <= bin.width / 2 - margin &&
+    Math.abs(local.z) <= bin.depth / 2 - margin;
+}
 
 export const TABLES = [
-  { id: 'mesa-1', x: -1.01, z: 0.64 },
-  { id: 'mesa-2', x: 1.01, z: 0.64 },
-  { id: 'mesa-3', x: -1.01, z: -0.17 },
-  { id: 'mesa-4', x: 1.01, z: -0.17 }
-].map(t => ({ ...t, x: t.x + STATION.x, z: t.z + STATION.z }));
+  [-.59, .37], [.59, .37], [-.59, -.37], [.59, -.37]
+].map(([x, z], i) => ({ id: `mesa-${i+1}`,
+  ...localToWorldXZ(FIGURE_STATION, x, z), rotationY: FIGURE_STATION.rotationY }));
 
 export const TABLE = {
   width: 1.10,
@@ -32,8 +43,8 @@ export const TABLE = {
 export const TABLE_TOP = TABLE.centerY + TABLE.thick / 2;
 
 // Recipientes ampliados y separados.
-export const BIN_X = [-1.14, -0.38, 0.38, 1.14].map(x => x + STATION.x);
-export const BIN_Z = -1.08 + STATION.z;
+export const BIN_X = [-1.14, -0.38, 0.38, 1.14];
+export const BIN_Z = 0; // coordenada local de la estación de clasificación
 
 export const BIN = {
   width: 0.69,
@@ -48,10 +59,10 @@ export const BIN_FLOOR = BIN.baseY + BIN.baseThick / 2;
 export const BIN_RIM = BIN_FLOOR + BIN.wallHeight;
 
 export const WORKSPACE = {
-  minX: -2.05 + STATION.x,
-  maxX: 2.05 + STATION.x,
-  minZ: -2.25 + STATION.z,
-  maxZ: 1.20 + STATION.z,
+  minX: -3.20,
+  maxX: 3.20,
+  minZ: -3.40,
+  maxZ: 1.50,
   minY: 0.16,
   maxY: 2.40
 };

@@ -19,14 +19,25 @@ export function createPhysics() {
   const obstacles = [];
   let accumulator = 0;
 
-  function staticBox(x, y, z, width, height, depth) {
+  function staticBox(x, y, z, width, height, depth, rotationY = 0) {
     const body = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC });
     body.addShape(new CANNON.Box(new CANNON.Vec3(width / 2, height / 2, depth / 2)));
     body.position.set(x, y, z);
+    body.quaternion.setFromEuler(0, rotationY, 0);
+    body.aabbNeedsUpdate = true;
     world.addBody(body);
+    const inverse = new CANNON.Quaternion();
+    inverse.setFromEuler(0, -rotationY, 0);
     obstacles.push({
-      min: { x: x - width / 2, y: y - height / 2, z: z - depth / 2 },
-      max: { x: x + width / 2, y: y + height / 2, z: z + depth / 2 }
+      x, y, z, rotationY,
+      inverse,
+      cos: Math.cos(rotationY), sin: Math.sin(rotationY),
+      worldMin: { x: x - (Math.abs(Math.cos(rotationY))*width + Math.abs(Math.sin(rotationY))*depth)/2,
+        y: y-height/2, z: z-(Math.abs(Math.sin(rotationY))*width + Math.abs(Math.cos(rotationY))*depth)/2 },
+      worldMax: { x: x + (Math.abs(Math.cos(rotationY))*width + Math.abs(Math.sin(rotationY))*depth)/2,
+        y: y+height/2, z: z+(Math.abs(Math.sin(rotationY))*width + Math.abs(Math.cos(rotationY))*depth)/2 },
+      min: { x: -width / 2, y: -height / 2, z: -depth / 2 },
+      max: { x: width / 2, y: height / 2, z: depth / 2 }
     });
     return body;
   }
@@ -66,6 +77,17 @@ export function createPhysics() {
   const candidatePosition = new CANNON.Vec3();
   const initialPosition = new CANNON.Vec3();
 
+  const localCandidate = new CANNON.Vec3();
+  const localInitial = new CANNON.Vec3();
+  const localQ = new CANNON.Quaternion();
+  const localNextMin = new CANNON.Vec3(), localNextMax = new CANNON.Vec3();
+  const localPrevMin = new CANNON.Vec3(), localPrevMax = new CANNON.Vec3();
+  function toObstacleLocal(position, obstacle, out) {
+    const dx = position.x - obstacle.x, dz = position.z - obstacle.z;
+    out.set(obstacle.cos*dx - obstacle.sin*dz, position.y - obstacle.y,
+      obstacle.sin*dx + obstacle.cos*dz);
+  }
+
   // Se acepta cualquier movimiento que NO cree una nueva penetracion ni
   // agrave una ya existente. Así una pieza atrapada puede retroceder o deslizarse.
   function safeForHeld(x, y, z, heldBody, from = heldBody?.position) {
@@ -90,7 +112,23 @@ export function createPhysics() {
     }
 
     for (const obstacle of obstacles) {
-      if (wouldPenetrateMore(obstacle.min, obstacle.max)) return false;
+      if (overlapDepth(candidateMin, candidateMax, obstacle.worldMin, obstacle.worldMax) <= 0) continue;
+      if (!obstacle.rotationY) {
+        if (wouldPenetrateMore(obstacle.worldMin, obstacle.worldMax)) return false;
+        continue;
+      }
+      // Evaluar la pieza en el sistema local de cada caja orientada.
+      // La envolvente de la pieza es conservadora, pero no se usa la AABB
+      // global de una mesa girada (que bloquearía espacios vacíos).
+      toObstacleLocal(candidatePosition, obstacle, localCandidate);
+      toObstacleLocal(initialPosition, obstacle, localInitial);
+      obstacle.inverse.mult(heldBody.quaternion, localQ);
+      shape.calculateWorldAABB(localCandidate, localQ, localNextMin, localNextMax);
+      const next = overlapDepth(localNextMin, localNextMax, obstacle.min, obstacle.max);
+      if (next <= .0002) continue;
+      shape.calculateWorldAABB(localInitial, localQ, localPrevMin, localPrevMax);
+      const before = overlapDepth(localPrevMin, localPrevMax, obstacle.min, obstacle.max);
+      if (before <= .0002 || next > before + .00001) return false;
     }
 
     for (const other of world.bodies) {
