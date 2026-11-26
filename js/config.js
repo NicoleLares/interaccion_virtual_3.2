@@ -7,9 +7,9 @@ export const CATEGORIES = [
 ];
 
 // Coordenadas del aula centrada: -Z hacia el pizarrón.
-export const DIAGONAL_ANGLE = 40 * Math.PI / 180;
-export const FIGURE_STATION = { x: -1.45, z: -1.15, rotationY: DIAGONAL_ANGLE };
-export const BIN_STATION = { x: 1.55, z: -1.45, rotationY: -DIAGONAL_ANGLE };
+// Distribución en U: dos mesas a cada lado y clasificación al frente.
+// Los bordes de las mesas y las etiquetas miran hacia el pasillo central.
+export const BIN_STATION = { x: 0, z: -2.10, rotationY: 0 };
 export const HUD_POSITION = { x: -0.33, y: 2.15, z: -3.86 };
 
 // Transformaciones compartidas por mallas, cuerpos físicos y reglas del juego.
@@ -17,11 +17,13 @@ export function localToWorldXZ(frame, x, z) {
   const c = Math.cos(frame.rotationY || 0), s = Math.sin(frame.rotationY || 0);
   return { x: frame.x + c*x + s*z, z: frame.z - s*x + c*z };
 }
+
 export function worldToLocalXZ(frame, x, z) {
   const c = Math.cos(frame.rotationY || 0), s = Math.sin(frame.rotationY || 0);
   const dx = x - frame.x, dz = z - frame.z;
   return { x: c*dx - s*dz, z: s*dx + c*dz };
 }
+
 export function insideBinXZ(bin, x, z, margin = .075) {
   const local = worldToLocalXZ(bin, x, z);
   return Math.abs(local.x) <= bin.width / 2 - margin &&
@@ -29,9 +31,11 @@ export function insideBinXZ(bin, x, z, margin = .075) {
 }
 
 export const TABLES = [
-  [-.59, .37], [.59, .37], [-.59, -.37], [.59, -.37]
-].map(([x, z], i) => ({ id: `mesa-${i+1}`,
-  ...localToWorldXZ(FIGURE_STATION, x, z), rotationY: FIGURE_STATION.rotationY }));
+  { id: 'mesa-1', x: -1.25, z:  .25, rotationY:  Math.PI / 2 },
+  { id: 'mesa-2', x: -1.25, z: -1.05, rotationY:  Math.PI / 2 },
+  { id: 'mesa-3', x:  1.25, z:  .25, rotationY: -Math.PI / 2 },
+  { id: 'mesa-4', x:  1.25, z: -1.05, rotationY: -Math.PI / 2 }
+];
 
 export const TABLE = {
   width: 1.10,
